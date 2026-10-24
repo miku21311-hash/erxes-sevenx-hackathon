@@ -17,8 +17,6 @@ export const config: ModuleFederationConfig = {
   exposes: {
     './config': './src/config.tsx',
     './sevenx': './src/modules/SevenxMain.tsx',
-    './sevenxSettings': './src/modules/SevenxSettings.tsx',
-    './widgets': './src/widgets/Widgets.tsx',
   },
 
   shared: (libraryName, defaultConfig) => {

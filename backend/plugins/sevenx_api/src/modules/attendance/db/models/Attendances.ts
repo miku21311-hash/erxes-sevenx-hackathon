@@ -83,7 +83,8 @@ export const loadSevenxAttendanceClass = (models: IModels) => {
         const absentMarked = count('absent');
         const unmarked = Math.max(total - mine.length, 0);
         const absent = absentMarked + unmarked;
-        const rate = total > 0 ? Math.min(100, Math.round(((present + late) / total) * 1000) / 10) : 0;
+        // Fraction 0..1 (UIs format it as a percentage).
+        const rate = total > 0 ? Math.min(1, Math.round(((present + late) / total) * 1000) / 1000) : 0;
         return { studentId, total, present, late, absent, excused, rate };
       });
     }

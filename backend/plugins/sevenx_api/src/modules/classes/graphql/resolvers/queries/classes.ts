@@ -68,7 +68,9 @@ export const sevenxClassQueries: Record<string, SevenxResolver> = {
       date: { $gte: from, $lte: today },
       status: { $in: ['present', 'late'] },
     });
-    const weeklyAttendanceRate = expected > 0 ? Math.round((attended / expected) * 1000) / 10 : 0;
+    // Fraction 0..1, same convention as SevenxAttendanceSummary.rate.
+    const weeklyAttendanceRate =
+      expected > 0 ? Math.min(1, Math.round((attended / expected) * 1000) / 1000) : 0;
 
     return {
       teacherCount,
