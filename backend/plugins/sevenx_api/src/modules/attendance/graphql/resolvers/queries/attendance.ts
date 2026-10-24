@@ -34,7 +34,10 @@ export const sevenxAttendanceQueries: Record<string, SevenxResolver> = {
   sevenxMyAttendance: portal(async (_root, { classId }: { classId: string }, context: IContext) => {
     const member = await requireMember(context, 'student');
     await requireClassAccess(context, classId);
-    return context.models.Attendances.find({ classId, studentId: member._id }).sort({ date: -1 }).lean();
+    return await context.models.Attendances
+      .find({ classId, studentId: member._id })
+      .sort({ date: -1 })
+      .lean();
   }),
 
   sevenxMyAttendanceSummary: portal(

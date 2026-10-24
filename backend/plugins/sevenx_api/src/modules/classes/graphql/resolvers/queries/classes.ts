@@ -21,7 +21,7 @@ export const sevenxClassQueries: Record<string, SevenxResolver> = {
 
   sevenxMyClasses: portal(async (_root, _args, context: IContext) => {
     const member = await requireMember(context);
-    return context.models.Classes.find({
+    return await context.models.Classes.find({
       status: 'active',
       $or: [{ teacherId: member._id }, { studentIds: member._id }],
     })

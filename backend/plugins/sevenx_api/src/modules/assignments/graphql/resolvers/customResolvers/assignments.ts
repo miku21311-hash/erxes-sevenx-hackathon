@@ -5,11 +5,11 @@ import {
 } from '@/assignments/@types/assignments';
 
 export const SevenxAssignment = {
-  submissionCount(assignment: ISevenxAssignmentDocument, _args: unknown, { models }: IContext) {
-    return models.Submissions.countDocuments({ assignmentId: assignment._id });
+  async submissionCount(assignment: ISevenxAssignmentDocument, _args: unknown, { models }: IContext) {
+    return await models.Submissions.countDocuments({ assignmentId: assignment._id });
   },
-  gradedCount(assignment: ISevenxAssignmentDocument, _args: unknown, { models }: IContext) {
-    return models.Submissions.countDocuments({
+  async gradedCount(assignment: ISevenxAssignmentDocument, _args: unknown, { models }: IContext) {
+    return await models.Submissions.countDocuments({
       assignmentId: assignment._id,
       gradedAt: { $exists: true },
     });
@@ -22,13 +22,13 @@ export const SevenxAssignment = {
     if (!member || member.role !== 'student') {
       return null;
     }
-    return models.Submissions.findOne({ assignmentId: assignment._id, studentId: member._id }).lean();
+    return await models.Submissions.findOne({ assignmentId: assignment._id, studentId: member._id }).lean();
   },
 };
 
 export const SevenxSubmission = {
-  student(submission: ISevenxSubmissionDocument, _args: unknown, { models }: IContext) {
-    return models.Members.findOne({ _id: submission.studentId }).lean();
+  async student(submission: ISevenxSubmissionDocument, _args: unknown, { models }: IContext) {
+    return await models.Members.findOne({ _id: submission.studentId }).lean();
   },
   async isLate(submission: ISevenxSubmissionDocument, _args: unknown, { models }: IContext) {
     const assignment = await models.Assignments.findOne({ _id: submission.assignmentId }).lean();

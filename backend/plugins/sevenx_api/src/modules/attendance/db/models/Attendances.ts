@@ -65,11 +65,17 @@ export const loadSevenxAttendanceClass = (models: IModels) => {
 
     public static async summarize(classId: string, studentIds: string[]) {
       const cls = await models.Classes.getClass(classId);
-      const total = pastSessionDates(cls.schedule).length;
       const rows = await models.Attendances.find({ classId, studentId: { $in: studentIds } }).lean();
+      // A session counts once it is in the past or once anyone has been marked for it.
+      const sessionDates = new Set<string>(pastSessionDates(cls.schedule));
+      const markedDates = await models.Attendances.distinct('date', { classId });
+      for (const date of markedDates) {
+        sessionDates.add(date);
+      }
+      const total = sessionDates.size;
 
       return studentIds.map((studentId) => {
-        const mine = rows.filter((r) => r.studentId === studentId);
+        const mine = rows.filter((r) => r.studentId === studentId && sessionDates.has(r.date));
         const count = (status: string) => mine.filter((r) => r.status === status).length;
         const present = count('present');
         const late = count('late');
@@ -77,7 +83,7 @@ export const loadSevenxAttendanceClass = (models: IModels) => {
         const absentMarked = count('absent');
         const unmarked = Math.max(total - mine.length, 0);
         const absent = absentMarked + unmarked;
-        const rate = total > 0 ? Math.round(((present + late) / total) * 1000) / 10 : 0;
+        const rate = total > 0 ? Math.min(100, Math.round(((present + late) / total) * 1000) / 10) : 0;
         return { studentId, total, present, late, absent, excused, rate };
       });
     }

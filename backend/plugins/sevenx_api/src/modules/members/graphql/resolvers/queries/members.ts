@@ -24,7 +24,7 @@ export const sevenxMemberQueries: Record<string, SevenxResolver> = {
   },
 
   sevenxMe: portal(async (_root, _args, { models, cpUser }: IContext) =>
-    models.Members.getMemberByCpUser(cpUser._id),
+    await models.Members.getMemberByCpUser(cpUser._id),
   ),
 
   sevenxInviteCheck: publicResolver(async (_root, { token }: { token: string }, { models }: IContext) => {

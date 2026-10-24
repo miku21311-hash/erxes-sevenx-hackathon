@@ -38,7 +38,8 @@
   `sevenxScheduleConflicts`.
 - Sessions are computed from the schedule at runtime (no session collection);
   attendance rows are keyed by `classId + date (YYYY-MM-DD) + studentId`.
-- Attendance summaries treat unmarked past sessions as absent.
+- Attendance summaries count a session once it is in the past or once anyone
+  in the class was marked for that date; unmarked sessions count as absent.
 - Invite flow: `sevenxInviteCreate` (supervisor, or teacher for own classes)
   creates an `invited` member + token; `sevenxInviteCheck` is public;
   `sevenxInviteAccept` links the calling cpUser and activates the member.
