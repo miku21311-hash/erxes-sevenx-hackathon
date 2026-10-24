@@ -38,11 +38,15 @@ export const clearSession = (): void => {
 };
 
 /** Extracts the JWT from the JSON returned by clientPortalUserLoginWithCredentials. */
+const looksLikeJwt = (value: string): boolean => value.split('.').length === 3;
+
 export const tokenFromLoginResult = (result: unknown): string | null => {
-  if (typeof result === 'string') return result || null;
+  // Cookie delivery returns the plain string "Success"; only keep real JWTs,
+  // otherwise the bogus `client-auth-token` header would override the cookie.
+  if (typeof result === 'string') return looksLikeJwt(result) ? result : null;
   if (result && typeof result === 'object' && 'token' in result) {
     const token = (result as { token?: unknown }).token;
-    return typeof token === 'string' && token ? token : null;
+    return typeof token === 'string' && looksLikeJwt(token) ? token : null;
   }
   return null;
 };
