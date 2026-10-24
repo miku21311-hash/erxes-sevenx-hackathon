@@ -1,0 +1,176 @@
+# 7x (sevenx) — GraphQL CONTRACT between sevenx_api, sevenx_ui and apps/sevenx-portal.
+# This file is the agreement. Backend implements it exactly; UIs code against it.
+# Any change must be made here FIRST, then in code. Prefix: sevenx*.
+#
+# Auth model
+#  - Supervisor  = erxes team member (core UI). Queries/mutations in section [S] require
+#                  a logged-in team member (normal permission wrapper).
+#  - Teacher/Student = client portal user (cpUser). Section [P] resolvers are marked
+#                  wrapperConfig = { cpUserRequired: true } and resolve "me" via
+#                  SevenxMember.cpUserId === context.cpUser._id.
+#  - Section [PUB] = public (skipPermission), used before login (invite check).
+
+scalar Date
+scalar JSON
+
+enum SevenxRole { teacher student }
+enum SevenxMemberStatus { invited active }
+enum SevenxAttendanceStatus { present late absent excused }
+enum SevenxAnnouncementScope { all class }
+
+type SevenxAttachment { url: String!, name: String!, size: Int, type: String }
+input SevenxAttachmentInput { url: String!, name: String!, size: Int, type: String }
+
+type SevenxLocation { _id: String!, name: String!, address: String, rooms: [String!]!, createdAt: Date }
+
+type SevenxMember {
+  _id: String!
+  cpUserId: String
+  role: SevenxRole!
+  firstName: String!
+  lastName: String!
+  email: String!
+  phone: String
+  status: SevenxMemberStatus!
+  classIds: [String!]!          # derived: classes where teacherId == _id or studentIds contains _id
+  createdAt: Date
+}
+
+type SevenxSchedule {
+  daysOfWeek: [Int!]!           # 0=Sunday … 6=Saturday
+  startTime: String!            # "18:00"
+  endTime: String!              # "19:30"
+  startDate: Date!
+  endDate: Date!
+}
+input SevenxScheduleInput { daysOfWeek: [Int!]!, startTime: String!, endTime: String!, startDate: Date!, endDate: Date! }
+
+type SevenxClass {
+  _id: String!
+  name: String!
+  description: String
+  teacherId: String!
+  teacher: SevenxMember
+  locationId: String!
+  location: SevenxLocation
+  room: String
+  studentIds: [String!]!
+  students: [SevenxMember!]!
+  schedule: SevenxSchedule!
+  status: String!               # active | archived
+  nextSession: Date             # computed from schedule
+  createdAt: Date
+}
+input SevenxClassInput {
+  name: String!, description: String, teacherId: String!, locationId: String!, room: String,
+  studentIds: [String!], schedule: SevenxScheduleInput!
+}
+
+type SevenxScheduleConflict { kind: String!, classId: String!, className: String!, message: String! } # kind: teacher | room
+
+type SevenxSession { date: String!, startTime: String!, endTime: String!, isToday: Boolean!, isPast: Boolean! } # date = YYYY-MM-DD
+
+type SevenxAttendance {
+  _id: String!, classId: String!, date: String!, studentId: String!, student: SevenxMember,
+  status: SevenxAttendanceStatus!, note: String, markedBy: String, updatedAt: Date
+}
+input SevenxAttendanceItemInput { studentId: String!, status: SevenxAttendanceStatus!, note: String }
+
+type SevenxAttendanceSummary { total: Int!, present: Int!, late: Int!, absent: Int!, excused: Int!, rate: Float! } # rate = (present+late)/total
+
+type SevenxAssignment {
+  _id: String!, classId: String!, title: String!, description: String, attachments: [SevenxAttachment!]!,
+  dueDate: Date!, maxScore: Int!, createdBy: String!, createdAt: Date,
+  submissionCount: Int!, gradedCount: Int!,       # teacher view
+  mySubmission: SevenxSubmission                  # student view (null if none)
+}
+input SevenxAssignmentInput { classId: String!, title: String!, description: String, attachments: [SevenxAttachmentInput!], dueDate: Date!, maxScore: Int }
+
+type SevenxSubmission {
+  _id: String!, assignmentId: String!, studentId: String!, student: SevenxMember,
+  text: String, attachments: [SevenxAttachment!]!, submittedAt: Date!,
+  score: Int, feedback: String, gradedAt: Date, isLate: Boolean!
+}
+
+type SevenxAnnouncement {
+  _id: String!, scope: SevenxAnnouncementScope!, classId: String, class: SevenxClass,
+  title: String!, body: String!, attachments: [SevenxAttachment!]!,
+  createdBy: String!, createdByName: String, createdAt: Date,
+  readCount: Int!, isRead: Boolean!              # isRead relative to current cpUser (false for supervisor)
+}
+
+type SevenxInvite { _id: String!, token: String!, email: String!, role: SevenxRole!, classIds: [String!]!, firstName: String, lastName: String, expiresAt: Date!, acceptedAt: Date, url: String! }
+type SevenxInviteCheck { valid: Boolean!, email: String, role: SevenxRole, firstName: String, lastName: String, classNames: [String!]!, reason: String }
+
+type SevenxDashboardStats {
+  teacherCount: Int!, studentCount: Int!, classCount: Int!, locationCount: Int!,
+  todaySessions: [SevenxClass!]!, weeklyAttendanceRate: Float!, pendingInvites: Int!
+}
+
+type Query {
+  # ---------- [S] supervisor ----------
+  sevenxDashboardStats: SevenxDashboardStats!
+  sevenxLocations: [SevenxLocation!]!
+  sevenxMembers(role: SevenxRole, searchValue: String, classId: String): [SevenxMember!]!
+  sevenxClasses(locationId: String, teacherId: String, searchValue: String, status: String): [SevenxClass!]!
+  sevenxClassDetail(_id: String!): SevenxClass            # [S] + [P] (teacher/student of that class)
+  sevenxScheduleConflicts(input: SevenxClassInput!, excludeClassId: String): [SevenxScheduleConflict!]!
+  sevenxAttendanceReport(classId: String!, from: String, to: String): [SevenxAttendance!]!
+  sevenxInvites(role: SevenxRole, classId: String): [SevenxInvite!]!
+  sevenxAnnouncements(classId: String, limit: Int): [SevenxAnnouncement!]!   # [S] all; [P] visible to me
+
+  # ---------- [P] portal (cpUserRequired) ----------
+  sevenxMe: SevenxMember                                    # null => cpUser not linked to any member
+  sevenxMyClasses: [SevenxClass!]!
+  sevenxClassSessions(classId: String!, from: String, to: String): [SevenxSession!]!
+  sevenxAttendanceByDate(classId: String!, date: String!): [SevenxAttendance!]!   # teacher; one row per student (status may be absent-by-default, _id "" if not saved)
+  sevenxMyAttendance(classId: String!): [SevenxAttendance!]!                      # student
+  sevenxMyAttendanceSummary(classId: String!): SevenxAttendanceSummary!           # student
+  sevenxClassAttendanceSummary(classId: String!): [SevenxAttendanceSummary!]!     # teacher/supervisor, one per student (order = class.students)
+  sevenxAssignments(classId: String!): [SevenxAssignment!]!
+  sevenxAssignmentDetail(_id: String!): SevenxAssignment
+  sevenxSubmissions(assignmentId: String!): [SevenxSubmission!]!                  # teacher
+
+  # ---------- [PUB] ----------
+  sevenxInviteCheck(token: String!): SevenxInviteCheck!
+}
+
+type Mutation {
+  # ---------- [S] supervisor ----------
+  sevenxLocationAdd(name: String!, address: String, rooms: [String!]): SevenxLocation!
+  sevenxLocationEdit(_id: String!, name: String!, address: String, rooms: [String!]): SevenxLocation!
+  sevenxLocationRemove(_id: String!): String!
+  sevenxClassAdd(input: SevenxClassInput!): SevenxClass!            # throws with conflict message if conflicts exist
+  sevenxClassEdit(_id: String!, input: SevenxClassInput!): SevenxClass!
+  sevenxClassRemove(_id: String!): String!
+  sevenxClassAddStudents(_id: String!, studentIds: [String!]!): SevenxClass!
+  sevenxClassRemoveStudent(_id: String!, studentId: String!): SevenxClass!
+  sevenxMemberEdit(_id: String!, firstName: String, lastName: String, phone: String): SevenxMember!
+  sevenxMemberRemove(_id: String!): String!
+  sevenxInviteRemove(_id: String!): String!
+
+  # ---------- [S] + [P teacher] ----------
+  sevenxInviteCreate(email: String!, role: SevenxRole!, classIds: [String!], firstName: String, lastName: String): SevenxInvite!
+    # teacher may only invite role=student into own classes
+  sevenxAnnouncementAdd(scope: SevenxAnnouncementScope!, classId: String, title: String!, body: String!, attachments: [SevenxAttachmentInput!]): SevenxAnnouncement!
+    # teacher: scope must be class and classId own class
+  sevenxAnnouncementRemove(_id: String!): String!
+
+  # ---------- [P] portal ----------
+  sevenxInviteAccept(token: String!): SevenxMember!                 # links context.cpUser._id to the member, status -> active
+  sevenxAttendanceMark(classId: String!, date: String!, items: [SevenxAttendanceItemInput!]!): [SevenxAttendance!]!   # teacher, upsert
+  sevenxAssignmentAdd(input: SevenxAssignmentInput!): SevenxAssignment!            # teacher
+  sevenxAssignmentEdit(_id: String!, input: SevenxAssignmentInput!): SevenxAssignment!
+  sevenxAssignmentRemove(_id: String!): String!
+  sevenxSubmissionUpsert(assignmentId: String!, text: String, attachments: [SevenxAttachmentInput!]): SevenxSubmission!   # student
+  sevenxSubmissionGrade(_id: String!, score: Int!, feedback: String): SevenxSubmission!                                   # teacher
+  sevenxAnnouncementMarkRead(_id: String!): SevenxAnnouncement!
+}
+
+# ---- Core (erxes) operations the portal uses directly, NOT implemented by sevenx ----
+#  mutation clientPortalUserRegister(clientPortalId: String!, email: String!, password: String!, firstName: String!, lastName: String!, ...) : CPUser
+#  mutation clientPortalUserLoginWithCredentials(email: String, password: String): JSON   (sets cookie)
+#  mutation clientPortalLogout: String
+#  query    clientPortalCurrentUser: CPUser
+#  Portal sends header  x-app-token: <ClientPortal app token>  on every request (see apps/client-portal-template).
+#  File upload: core-api REST upload (see backend/core-api/src/modules/files); store returned URL in SevenxAttachmentInput.
