@@ -6,7 +6,8 @@
   "scripts": {
     "dev": "nodemon src/main.ts",
     "build": "tsc --project tsconfig.build.json && tsc-alias -p tsconfig.build.json",
-    "start": "node -r tsconfig-paths/register dist/src/main.js"
+    "start": "node -r tsconfig-paths/register dist/src/main.js",
+    "seed": "ts-node -r tsconfig-paths/register scripts/seed.ts"
   },
   "keywords": [],
   "author": "",
@@ -14,5 +15,11 @@
   "dependencies": {
     "erxes-api-shared": "workspace:^"
   },
-  "devDependencies": {}
+  "devDependencies": {
+    "bcryptjs": "^3.0.2",
+    "@types/bcryptjs": "^2.4.6",
+    "dotenv": "^16.4.7",
+    "ts-node": "10.9.1",
+    "tsconfig-paths": "^4.2.0"
+  }
 }

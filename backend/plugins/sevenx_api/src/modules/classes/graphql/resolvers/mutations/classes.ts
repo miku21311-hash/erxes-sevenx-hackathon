@@ -1,17 +1,29 @@
+import { IContext } from '~/connectionResolvers';
+import { SevenxResolver } from '@/common/auth';
+import { ISevenxClassInput } from '@/classes/@types/classes';
 
-  import { IContext } from '~/connectionResolvers';
+export const sevenxClassMutations: Record<string, SevenxResolver> = {
+  sevenxClassAdd: async (_root, { input }: { input: ISevenxClassInput }, { models }: IContext) =>
+    models.Classes.createClass(input),
 
-  export const classesMutations = {
-    createClasses: async (_parent: undefined, { name }, { models }: IContext) => {
-      return models.Classes.createClasses({name});
-    },
+  sevenxClassEdit: async (
+    _root,
+    { _id, input }: { _id: string; input: ISevenxClassInput },
+    { models }: IContext,
+  ) => models.Classes.updateClass(_id, input),
 
-    updateClasses: async (_parent: undefined, { _id, name }, { models }: IContext) => {
-      return models.Classes.updateClasses(_id, {name});
-    },
+  sevenxClassRemove: async (_root, { _id }: { _id: string }, { models }: IContext) =>
+    models.Classes.removeClass(_id),
 
-    removeClasses: async (_parent: undefined, { _id }, { models }: IContext) => {
-      return models.Classes.removeClasses(_id);
-    },
-  };
+  sevenxClassAddStudents: async (
+    _root,
+    { _id, studentIds }: { _id: string; studentIds: string[] },
+    { models }: IContext,
+  ) => models.Classes.addStudents(_id, studentIds),
 
+  sevenxClassRemoveStudent: async (
+    _root,
+    { _id, studentId }: { _id: string; studentId: string },
+    { models }: IContext,
+  ) => models.Classes.removeStudent(_id, studentId),
+};
