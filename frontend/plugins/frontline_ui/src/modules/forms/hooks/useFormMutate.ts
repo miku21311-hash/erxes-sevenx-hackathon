@@ -1,0 +1,186 @@
+import { z } from 'zod';
+import { useFormAdd } from './useFormAdd';
+import { useFormEdit } from './useFormEdit';
+import { useNavigate, useParams } from 'react-router';
+import { useAtomValue, useSetAtom } from 'jotai';
+import {
+  formSetupValuesAtom,
+  resetFormSetupAtom,
+} from '../states/formSetupStates';
+import { FORM_CONFIRMATION_SCHEMA } from '../constants/formSchema';
+import {
+  FORM_BULK_ACTION,
+  CRAETE_LEAD_INTEGRATION,
+} from '../graphql/formMutations';
+import { GET_FORMS_TOTAL_COUNT } from '@/forms/graphql/formQueries';
+import { useMutation } from '@apollo/client';
+import { isDefined, toast } from 'erxes-ui';
+import { useFormDetail } from './useFormDetail';
+import { useTranslation } from 'react-i18next';
+
+type FormField = { tempFieldId?: string } & Record<string, unknown>;
+
+const buildEditFieldsVariables = (
+  id: string,
+  formFields: FormField[],
+  existingFields: { _id: string }[],
+) => ({
+  contentType: 'form',
+  contentTypeId: id,
+  updatedFields: formFields
+    .filter((field) => existingFields.some((f) => f._id === field.tempFieldId))
+    .map(({ tempFieldId, ...field }) => ({ ...field, _id: tempFieldId })),
+  newFields: formFields.filter(
+    (field) => !existingFields.some((f) => f._id === field.tempFieldId),
+  ),
+  removedFieldIds: existingFields
+    .filter((f) => !formFields.some((field) => field.tempFieldId === f._id))
+    .map((f) => f._id),
+});
+
+export const useFormMutate = () => {
+  const { t } = useTranslation('frontline', { keyPrefix: 'modules.forms' });
+  const { formId: id, id: _channelId } = useParams();
+  const navigate = useNavigate();
+  const formSetupValues = useAtomValue(formSetupValuesAtom);
+  const resetFormSetup = useSetAtom(resetFormSetupAtom);
+  const { formDetail } = useFormDetail({ formId: id as string });
+  const { addForm, isAddingForm, client: addFormClient } = useFormAdd();
+  const { editForm, loading: isEditingForm } = useFormEdit();
+  const [createLeadIntegration, { loading: isCreatingIntegration }] =
+    useMutation(CRAETE_LEAD_INTEGRATION, {
+      onError: (error) => {
+        toast({
+          title: t('error', 'Error'),
+          description: error.message,
+          variant: 'destructive',
+        });
+      },
+    });
+
+  const [fieldsBulkAction, { loading: isFieldsBulkActionLoading }] =
+    useMutation(FORM_BULK_ACTION, {
+      onError: (error) => {
+        toast({
+          title: t('error', 'Error'),
+          description: error.message,
+          variant: 'destructive',
+        });
+      },
+    });
+
+  const handleMutateForm = async (
+    confirmation: z.infer<typeof FORM_CONFIRMATION_SCHEMA>,
+  ) => {
+    const {
+      formValues,
+      formFields,
+      channelId: selectedChannelId,
+    } = formSetupValues(confirmation);
+    const channelId =
+      formDetail?.channelId || selectedChannelId || _channelId || '';
+    if (id) {
+      await editForm({
+        variables: {
+          ...formValues,
+          id,
+          integrationId: formDetail?.integrationId,
+        },
+        onCompleted: () => {
+          fieldsBulkAction({
+            variables: buildEditFieldsVariables(
+              id,
+              formFields,
+              (formDetail?.fields ?? []).filter(isDefined),
+            ),
+            onCompleted: () => {
+              toast({
+                title: t('success', 'Success!'),
+                variant: 'success',
+                description: t(
+                  'form-updated-successfully',
+                  'Form updated successfully',
+                ),
+              });
+            },
+          });
+        },
+        onError: (error) => {
+          toast({
+            title: t('error', 'Error'),
+            description: error.message,
+            variant: 'destructive',
+          });
+        },
+      });
+    } else {
+      if (!channelId) {
+        toast({
+          variant: 'destructive',
+          title: t(
+            'channel-id-required',
+            'Channel ID is required to create a form',
+          ),
+        });
+        return;
+      }
+      const integrationResult = await createLeadIntegration({
+        variables: { name: formValues.name, channelId },
+      });
+      const integrationId =
+        integrationResult.data?.integrationsCreateLeadIntegration?._id;
+      await addForm({
+        variables: { ...formValues, channelId, integrationId },
+        refetchQueries: [GET_FORMS_TOTAL_COUNT],
+        onCompleted: ({ formsAdd }) => {
+          if (!formsAdd) return;
+
+          fieldsBulkAction({
+            variables: {
+              contentType: 'form',
+              contentTypeId: formsAdd._id,
+              newFields: formFields,
+            },
+            onCompleted: () => {
+              toast({
+                title: t('success', 'Success!'),
+                variant: 'success',
+                description: t(
+                  'form-created-successfully',
+                  'Form created successfully',
+                ),
+              });
+            },
+          });
+          addFormClient?.cache.evict({
+            id: 'ROOT_QUERY',
+            fieldName: 'forms',
+          });
+          addFormClient?.cache.gc();
+        },
+        onError: (error) => {
+          toast({
+            title: t('error', 'Error'),
+            description: error.message,
+            variant: 'destructive',
+          });
+        },
+      });
+    }
+    resetFormSetup();
+    navigate(
+      _channelId
+        ? `/frontline/settings/channels/${_channelId}/forms`
+        : '/frontline/forms',
+    );
+  };
+
+  return {
+    loading:
+      isAddingForm ||
+      isEditingForm ||
+      isFieldsBulkActionLoading ||
+      isCreatingIntegration,
+    handleMutateForm,
+  };
+};

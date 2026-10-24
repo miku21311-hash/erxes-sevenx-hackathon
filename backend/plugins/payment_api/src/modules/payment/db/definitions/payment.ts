@@ -1,0 +1,47 @@
+import { Schema } from 'mongoose';
+import { CURRENCIES, PAYMENTS, PAYMENT_METHOD_STATUS } from '~/constants';
+
+import { mongooseStringRandomId, schemaWrapper } from 'erxes-api-shared/utils';
+
+export const paymentSchema = schemaWrapper(
+  new Schema(
+    {
+      _id: mongooseStringRandomId,
+      name: { type: String, label: 'Name' },
+      kind: { type: String, label: 'Kind', enum: PAYMENTS.ALL },
+      status: {
+        type: String,
+        label: 'Status',
+        enum: PAYMENT_METHOD_STATUS.ALL,
+        default: PAYMENT_METHOD_STATUS.ACTIVE,
+      },
+      config: { type: Object, label: 'Config' },
+      sendEmailOnPayment: {
+        type: Boolean,
+        label: 'Send email on payment',
+        default: false,
+      },
+      dealConfig: {
+        type: new Schema(
+          {
+            enabled: { type: Boolean, default: false },
+            boardId: { type: String, label: 'Board' },
+            pipelineId: { type: String, label: 'Pipeline' },
+            stageId: { type: String, label: 'Stage' },
+          },
+          { _id: false },
+        ),
+        label: 'Deal config',
+        optional: true,
+      },
+      acceptedCurrencies: {
+        type: [String],
+        label: 'Accepted currencies',
+        enum: CURRENCIES,
+      },
+    },
+    {
+      timestamps: true,
+    },
+  ),
+);

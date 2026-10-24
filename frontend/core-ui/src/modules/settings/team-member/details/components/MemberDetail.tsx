@@ -1,0 +1,38 @@
+import { FocusSheet, Separator, useQueryState } from 'erxes-ui';
+import { MemberDetailGeneral } from './MemberDetailGeneral';
+import { useUserDetail } from '../../hooks/useUserDetail';
+import { MemberDetailSidebar } from './MemberDetailSidebar';
+import { MemberDetailMainContents } from './MemberDetailMainContents';
+import { MemberDetailErrorState } from './MemberDetailErrorState';
+import { MemberDetailEmptyState } from './MemberDetailEmptyState';
+import { useTranslation } from 'react-i18next';
+
+export const MemberDetail = () => {
+  const [open, setOpen] = useQueryState<string>('user_id');
+  const { error, userDetail, loading } = useUserDetail();
+  const { t } = useTranslation('settings', { keyPrefix: 'team-member' });
+
+  return (
+    <FocusSheet open={!!open} onOpenChange={() => setOpen(null)}>
+      <FocusSheet.View
+        loading={loading}
+        error={!!error}
+        notFound={!userDetail}
+        notFoundState={<MemberDetailEmptyState />}
+        errorState={<MemberDetailErrorState />}
+      >
+        <FocusSheet.Header title={t('member-detail')} />
+        <FocusSheet.Content>
+          <FocusSheet.SideBar>
+            <MemberDetailSidebar />
+          </FocusSheet.SideBar>
+          <div className="flex-1 flex flex-col overflow-hidden">
+            <MemberDetailGeneral />
+            <Separator />
+            <MemberDetailMainContents />
+          </div>
+        </FocusSheet.Content>
+      </FocusSheet.View>
+    </FocusSheet>
+  );
+};

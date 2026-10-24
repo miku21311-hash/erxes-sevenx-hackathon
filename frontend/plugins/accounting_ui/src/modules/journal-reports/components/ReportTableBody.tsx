@@ -1,0 +1,386 @@
+import { ReportTable, Skeleton, cn } from 'erxes-ui';
+import { useAtomValue, useSetAtom } from 'jotai';
+import React, { useEffect, useMemo, useRef } from 'react';
+import { useSearchParams } from 'react-router-dom';
+import { useJournalReportData } from '../hooks/useJournalReportData';
+import { useJournalReportMore } from '../hooks/useJournalReportMore';
+import { moreDataState } from '../states/renderingReportsStates';
+import { IGroupRule, ReportRules } from '../types/reportsMap';
+import { buildDetailedReportPath } from '../utils/reportNavigation';
+import {
+  CalcReportHandler,
+  getCalcReport,
+  getRenderMoreHandler,
+} from './includes';
+import {
+  groupRecords,
+  moreDataByKey,
+  shouldKeepZeroRows,
+  toSafeString,
+  totalsCalc,
+} from './includes/utils';
+
+type QueryObject = Record<string, string | string[]>;
+
+const getStringParam = (value?: string | string[]) =>
+  Array.isArray(value) ? value[0] : value;
+
+export function useQueryObject(): QueryObject {
+  const [searchParams] = useSearchParams();
+
+  const obj: QueryObject = {};
+  for (const key of searchParams.keys()) {
+    const values = searchParams.getAll(key);
+    obj[key] = values.length > 1 ? values : values[0];
+  }
+
+  return obj;
+}
+
+export const ReportTableBody = () => {
+  const {
+    report: reportParam,
+    groupKey: groupKeyParam,
+    ...params
+  } = useQueryObject();
+  const report = getStringParam(reportParam) || '';
+  const groupKey = getStringParam(groupKeyParam);
+  const reportConf = ReportRules[report];
+
+  const isMore = getStringParam(params.isMore) === 'true';
+  const unhideZero = getStringParam(params.unhideZero) === 'true';
+
+  const colCount = reportConf?.colCount ?? 0;
+  const defaultGroupKey = reportConf?.choices?.[0]?.code || 'default';
+  const groupRule =
+    reportConf?.groups?.[groupKey || defaultGroupKey] ||
+    reportConf?.groups?.[defaultGroupKey];
+
+  const calcReport = getCalcReport(report);
+
+  const { records = [], loading, error } = useJournalReportData();
+  const {
+    trDetails = [],
+    loading: detailLoading,
+    error: detailError,
+  } = useJournalReportMore();
+  const setMoreData = useSetAtom(moreDataState);
+
+  const tableRef = useRef<HTMLTableSectionElement>(null);
+
+  const grouped = React.useMemo(() => {
+    if (error || !groupRule) return {};
+
+    return groupRecords(records, groupRule);
+  }, [records, groupRule, error]);
+
+  // RENDER ДУУССАНЫ ДАРАА TOTALS БОДНО
+  useEffect(() => {
+    if (!tableRef?.current) return;
+    if (loading) return;
+    if (error) return;
+    if (!groupRule) return;
+
+    totalsCalc(
+      tableRef.current,
+      groupRule,
+      shouldKeepZeroRows(isMore, unhideZero),
+    );
+  }, [grouped, groupRule, loading, error, isMore, unhideZero]); // дата солигдох бүрт дахин бодно
+
+  useEffect(() => {
+    if (!tableRef?.current) return;
+    if (!isMore) return;
+    if (detailLoading) return;
+    if (detailError) return;
+    if (!groupRule) return;
+    setMoreData(moreDataByKey(trDetails, groupRule));
+  }, [
+    grouped,
+    detailLoading,
+    detailError,
+    isMore,
+    setMoreData,
+    trDetails,
+    groupRule,
+  ]); // дата солигдох бүрт дахин бодно
+
+  if (!report || !reportConf || !groupRule) {
+    return 'NOT FOUND REPORT';
+  }
+
+  if (error) {
+    return error.message;
+  }
+  if (detailError) {
+    return detailError.message;
+  }
+
+  if (loading || (isMore && detailLoading)) {
+    return <ReportTableBodySkeleton columnCount={colCount + 2} />;
+  }
+
+  return (
+    <tbody
+      data-slot="table-body"
+      ref={tableRef}
+      className={cn('[&_tr:last-child]:border-0')}
+    >
+      <ReportRecursiveRenderer
+        groupedDic={grouped}
+        groupRule={groupRule}
+        colCount={colCount}
+        calcReport={calcReport}
+        report={report}
+        isMore={isMore}
+      />
+    </tbody>
+  );
+};
+
+const ReportTableBodySkeleton = ({ columnCount }: { columnCount: number }) => (
+  <tbody data-slot="table-body" className={cn('[&_tr:last-child]:border-0')}>
+    {Array.from({ length: 8 }).map((_, rowIndex) => (
+      <ReportTable.Row key={`journal-report-loading-row-${rowIndex}`}>
+        {Array.from({ length: columnCount }).map((__, cellIndex) => (
+          <ReportTable.Cell
+            key={`journal-report-loading-cell-${rowIndex}-${cellIndex}`}
+          >
+            <Skeleton
+              className={cn('h-4 min-w-12', cellIndex < 2 ? 'w-32' : 'w-full')}
+            />
+          </ReportTable.Cell>
+        ))}
+      </ReportTable.Row>
+    ))}
+  </tbody>
+);
+
+// extract and render
+interface ReportRendererProps {
+  groupedDic: Record<string, unknown>;
+  groupRule?: IGroupRule;
+  colCount: number;
+  calcReport: CalcReportHandler;
+  report: string;
+  isMore?: boolean;
+}
+
+export function ReportRecursiveRenderer({
+  groupedDic,
+  groupRule,
+  colCount,
+  calcReport,
+  report,
+  isMore,
+}: ReportRendererProps) {
+  return (
+    <>
+      {renderGroup(
+        groupedDic,
+        groupRule || ({} as IGroupRule),
+        colCount,
+        0,
+        '',
+        '',
+        calcReport,
+        report,
+        isMore,
+        '',
+      )}
+    </>
+  );
+}
+
+const getMoreAttr = (
+  groupRule: IGroupRule,
+  grId: string,
+  moreAttr?: string,
+  isMore?: boolean,
+) => {
+  if (isMore && !groupRule.excMore) {
+    const preMoreAttr = moreAttr ? `${moreAttr}#` : '';
+    return `${preMoreAttr}${grId}`;
+  }
+  return moreAttr;
+};
+
+const openDetailedReport = (report: string, attr: string, isMore?: boolean) => {
+  if (isMore) {
+    return;
+  }
+
+  window.location.assign(
+    buildDetailedReportPath(window.location, report, attr),
+  );
+};
+
+function renderGroup(
+  groupedDic: Record<string, unknown>,
+  groupRule: IGroupRule,
+  colCount: number,
+  padding: number,
+  lastAttr: string,
+  leafAttr: string,
+  calcReport: CalcReportHandler,
+  report: string,
+  isMore?: boolean,
+  moreAttr?: string,
+): React.ReactNode[] {
+  if (!Object.keys(groupedDic || {}).length) return [];
+
+  const grId = `${groupRule.group}Id`;
+  const keyCode = `${groupRule.group}Code`;
+  const keyName = `${groupRule.group}Name`;
+
+  const sortedValues = Object.values(groupedDic).sort((a, b) =>
+    toSafeString((a as Record<string, unknown>)[keyCode]).localeCompare(
+      toSafeString((b as Record<string, unknown>)[keyCode]),
+    ),
+  );
+
+  return sortedValues.map((grStepValue) => {
+    const grStep = grStepValue as Record<string, unknown>;
+    const groupId = toSafeString(grStep[grId]);
+    const groupCode = toSafeString(grStep[keyCode]);
+    const groupName = toSafeString(grStep[keyName]);
+    const lAttr = lastAttr ? `${lastAttr}*` : '';
+    const attr = `${lAttr}${groupRule.group}+${groupId}`;
+
+    // Дараагийн групп байвал (recursion үргэлжилнэ)
+    if (groupRule.groupRule?.group) {
+      const preLeafAttr = (leafAttr && `${leafAttr},`) || '';
+      const newMoreAttr = getMoreAttr(groupRule, groupId, moreAttr, isMore);
+
+      return (
+        <React.Fragment key={attr}>
+          {
+            <ReportTable.Row
+              key={attr}
+              data-sum-key={attr}
+              className={cn(groupRule.style ?? '', !isMore && 'cursor-pointer')}
+              data-group={groupRule.group}
+              data-id={groupId}
+              onDoubleClick={() => openDetailedReport(report, attr, isMore)}
+            >
+              <ReportTable.Cell
+                className={cn(`text-left `, padding && 'pl-(--cellPadding)')}
+                style={
+                  { '--cellPadding': `${padding}px` } as React.CSSProperties
+                }
+              >
+                {groupCode}
+              </ReportTable.Cell>
+
+              <ReportTable.Cell className="text-left">
+                {groupName}
+              </ReportTable.Cell>
+
+              {Array.from(
+                { length: colCount },
+                (_value, valueIndex) => `${attr}-value-${valueIndex + 1}`,
+              ).map((key) => (
+                <ReportTable.Cell key={key} className="text-right" />
+              ))}
+            </ReportTable.Row>
+          }
+
+          {renderGroup(
+            grStep[groupRule.groupRule.group] as Record<string, unknown>,
+            groupRule.groupRule,
+            colCount,
+            padding + 25,
+            attr,
+            `${preLeafAttr}${attr}`,
+            calcReport,
+            report,
+            isMore,
+            newMoreAttr,
+          )}
+        </React.Fragment>
+      );
+    }
+
+    // Навч node
+    const { lastNode, afterNode, lastData } = calcReport(
+      grStep,
+      groupRule,
+      attr,
+    );
+
+    if (!lastNode) return null;
+
+    return (
+      <React.Fragment key={attr}>
+        <ReportTable.Row
+          key={attr}
+          data-keys={['footer', leafAttr].filter(Boolean).join(',')}
+          className={cn(
+            'text-right',
+            groupRule.style ?? '',
+            !isMore && 'cursor-pointer',
+          )}
+          data-group={groupRule.group}
+          data-id={groupId}
+          onDoubleClick={() => openDetailedReport(report, attr, isMore)}
+        >
+          <ReportTable.Cell
+            className={cn(`text-left `, padding && 'pl-(--cellPadding)')}
+            style={{ '--cellPadding': `${padding}px` } as React.CSSProperties}
+          >
+            {groupCode}
+          </ReportTable.Cell>
+
+          <ReportTable.Cell className="text-left">{groupName}</ReportTable.Cell>
+
+          {lastNode}
+        </ReportTable.Row>
+        {afterNode}
+        {isMore && (
+          <RenderMore
+            report={report}
+            treeIds={moreAttr ?? ''}
+            leafId={groupId}
+            nodeExtra={lastData}
+          />
+        )}
+      </React.Fragment>
+    );
+  });
+}
+
+const RenderMore = ({
+  report,
+  treeIds,
+  leafId,
+  nodeExtra,
+}: {
+  report: string;
+  treeIds: string;
+  leafId: string;
+  nodeExtra?: Record<string, unknown>;
+}) => {
+  const ReportMore = getRenderMoreHandler(report);
+
+  const treeIdsStr = treeIds ? `${treeIds}#` : '';
+  const perkey = `${treeIdsStr}${leafId}`;
+
+  const allMoreData = useAtomValue(moreDataState);
+  const moreData = useMemo(() => {
+    return allMoreData?.[perkey] || [];
+  }, [perkey, allMoreData]);
+
+  if (!ReportMore) {
+    return null;
+  }
+
+  // moreData Context
+  return (
+    <ReportMore
+      report={report}
+      moreData={moreData}
+      currentKey={perkey}
+      nodeExtra={nodeExtra}
+    />
+  );
+};

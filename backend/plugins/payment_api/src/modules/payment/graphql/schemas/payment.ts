@@ -1,0 +1,75 @@
+export const types = `
+  enum PaymentMethodStatus {
+    active
+    inactive
+  }
+
+  type PaymentDealConfig {
+    enabled: Boolean
+    boardId: String
+    pipelineId: String
+    stageId: String
+  }
+
+  input PaymentDealConfigInput {
+    enabled: Boolean
+    boardId: String
+    pipelineId: String
+    stageId: String
+  }
+
+  type Payment {
+    _id: String!
+    name: String!
+    kind: String!
+    status: PaymentMethodStatus
+    config: JSON
+    sendEmailOnPayment: Boolean
+    dealConfig: PaymentDealConfig
+    createdAt: Date
+  }
+
+  type paymentsTotalCount {
+    byKind: JSON
+    byStatus: JSON
+    total: Int
+  }
+
+  type PaymentPublic {
+    _id: String
+    name: String
+    kind: String
+  }
+`;
+
+export const inputs = `
+  input PaymentInput {
+    name: String!
+    kind: String!
+    status: PaymentMethodStatus
+    config: JSON
+    sendEmailOnPayment: Boolean
+    dealConfig: PaymentDealConfigInput
+  }
+`;
+
+export const queries = `
+  payments(status: String, kind: String): [Payment]
+
+  paymentsPublic(kind: String, _ids:[String], currency: String): [PaymentPublic]
+  paymentsCountByType: paymentsTotalCount
+  paymentsTotalCount(kind: String, status: String): paymentsTotalCount
+
+  qpayGetMerchant(_id: String!): JSON
+  qpayGetDistricts(cityCode: String!): JSON
+
+  paymentsGetStripeKey(_id: String!): String
+
+  cpPayments(status: String, kind: String): [Payment]
+`;
+
+export const mutations = `
+  paymentAdd(input: PaymentInput!): Payment
+  paymentEdit(_id: String!, input: PaymentInput!): Payment
+  paymentRemove(_ids: [String!]!): String
+`;

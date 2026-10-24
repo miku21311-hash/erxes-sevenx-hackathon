@@ -1,0 +1,10 @@
+import { IAfterProcessRule } from 'erxes-api-shared/utils';
+import { conversationAfterProcessWorkers } from '@/inbox/meta/afterProcess/conversation';
+
+export const inboxAfterProcessWorkers = {
+  rules: [...conversationAfterProcessWorkers.rules] as IAfterProcessRule[],
+  updatedDocument: {
+    conversation: conversationAfterProcessWorkers.afterDocumentUpdated,
+  },
+  createdDocument: {},
+};

@@ -1,0 +1,17 @@
+import { Document } from 'mongoose';
+import { IPipeline } from './pipeline';
+
+export interface IBoard {
+  name?: string;
+  userId?: string;
+  order?: number;
+  type?: string;
+  status?: 'active' | 'archived';
+  archiveInProgress?: boolean;
+}
+
+export interface IBoardDocument extends IBoard, Document {
+  _id: string;
+  createdAt?: Date;
+  pipelines?: IPipeline[];
+}

@@ -1,0 +1,42 @@
+import { Preview, Resizable, Separator } from 'erxes-ui';
+import { FrontlinePaths } from '@/types/FrontlinePaths';
+import { formSetupStepAtom } from '@/forms/states/formSetupStates';
+import { useAtomValue } from 'jotai';
+import { FormGeneral } from '@/forms/components/FormGeneral';
+import { FormCallout } from '@/forms/components/FormCallout';
+import { FormContent } from '@/forms/components/FormContent';
+import { FormConfirmation } from '@/forms/components/FormConfirmation';
+import { FORM_SETUP_STEPS } from '@/forms/constants/formStatesDefaultValues';
+
+export const FormSetupSteps = () => {
+  const step = useAtomValue(formSetupStepAtom);
+  return (
+    <Resizable.PanelGroup direction="horizontal" className="flex-auto">
+      <Resizable.Panel defaultSize={50}>
+        {step === FORM_SETUP_STEPS.GENERAL && <FormGeneral />}
+        {step === FORM_SETUP_STEPS.CALLOUT && <FormCallout />}
+        {step === FORM_SETUP_STEPS.CONTENT && <FormContent />}
+        {step === FORM_SETUP_STEPS.CONFIRMATION && <FormConfirmation />}
+      </Resizable.Panel>
+      <Resizable.Handle />
+      <Resizable.Panel
+        defaultSize={50}
+        className="flex flex-col overflow-hidden"
+      >
+        <Preview>
+          <div className="bg-background">
+            <Preview.Toolbar
+              path={
+                '/frontline/settings/forms' +
+                FrontlinePaths.FormPreview +
+                '?inPreview=true'
+              }
+            />
+          </div>
+          <Separator />
+          <Preview.View iframeSrc={'/frontline/forms/preview?inPreview=true'} />
+        </Preview>
+      </Resizable.Panel>
+    </Resizable.PanelGroup>
+  );
+};

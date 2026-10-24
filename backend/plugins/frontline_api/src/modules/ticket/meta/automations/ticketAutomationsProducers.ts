@@ -1,0 +1,77 @@
+import {
+  AUTOMATION_ERROR_CODES,
+  buildFailedAction,
+  getSetPropertySelector,
+  setProperty,
+  TCoreModuleProducerContext,
+  TAutomationProducers,
+  TAutomationProducersInput,
+} from 'erxes-api-shared/core-modules';
+import { IModels } from '~/connectionResolvers';
+import { prepareTicketPropertyWrite } from '~/modules/ticket/meta/automations/ticketPropertyWrites';
+import { createTicketAction } from '~/modules/ticket/meta/automations/actions/createTicketAction';
+
+export const ticketAutomationProducers = {
+  receiveActions: async (
+    input: TAutomationProducersInput[TAutomationProducers.RECEIVE_ACTIONS],
+    context: TCoreModuleProducerContext<IModels>,
+  ) => {
+    if (input.collectionType === 'tickets') {
+      return await createTicketAction({
+        models: context.models,
+        subdomain: context.subdomain,
+        action: input.action,
+        execution: input.execution,
+      });
+    }
+
+    return buildFailedAction(
+      `Ticket automations do not handle "${input.collectionType}"`,
+      AUTOMATION_ERROR_CODES.CONFIG_INVALID,
+    );
+  },
+
+  checkCustomTrigger: async () => false,
+
+  setProperties: async (
+    data: TAutomationProducersInput[TAutomationProducers.SET_PROPERTIES],
+    context: TCoreModuleProducerContext<IModels>,
+  ) => {
+    const { models, subdomain } = context;
+    const { action, execution, targetType } = data;
+    const { module, rules, setPropertyTarget } = action.config;
+
+    const selector = await getSetPropertySelector({
+      subdomain,
+      module,
+      execution,
+      targetType,
+      relation: setPropertyTarget?.relation,
+      targetPath: setPropertyTarget?.targetPath,
+      targetActionId: action.targetActionId,
+    });
+
+    return await setProperty({
+      models,
+      subdomain,
+      module,
+      rules,
+      execution,
+      setPropertyTarget,
+      selector,
+      fetchItems: async (itemSelector) =>
+        await models.Ticket.find(itemSelector).lean(),
+      update: async ({ selector: itemSelector, modifier, item }) =>
+        await models.Ticket.updateMany(
+          itemSelector,
+          await prepareTicketPropertyWrite({
+            models,
+            modifier,
+            item,
+            target: (execution.target || {}) as Record<string, unknown>,
+          }),
+        ),
+      targetType,
+    });
+  },
+};

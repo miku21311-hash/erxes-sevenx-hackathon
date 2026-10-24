@@ -1,0 +1,77 @@
+import { usePropertiesScope } from '@/properties/context/PropertiesScopeContext';
+import { Sheet, toast } from 'erxes-ui';
+import { useTranslation } from 'react-i18next';
+import { useNavigate, useParams } from 'react-router';
+import { useSetAtom } from 'jotai';
+import { needsToRefreshState } from '../states/needsToRefresh';
+import { IPropertyForm, PropertyForm, useAddProperty } from 'ui-modules';
+
+export const AddProperty = () => {
+  const { basePath: propertiesBasePath } = usePropertiesScope();
+  const { t } = useTranslation('settings', { keyPrefix: 'properties' });
+  const { groupId, type } = useParams<{
+    groupId: string;
+    type: string;
+  }>();
+  const { addProperty, loading } = useAddProperty();
+  const setNeedsToRefresh = useSetAtom(needsToRefreshState);
+  const navigate = useNavigate();
+
+  const handleClose = () => navigate(`${propertiesBasePath}/${type}`);
+
+  const onSubmit = (data: IPropertyForm) => {
+    addProperty({
+      variables: {
+        ...data,
+        contentType: type,
+      },
+      onCompleted: () => {
+        toast({
+          title: t('property-added', 'Property added'),
+          variant: 'success',
+        });
+        setNeedsToRefresh(true);
+        handleClose();
+      },
+      onError: (error) => {
+        toast({
+          title: t('error', 'Error'),
+          variant: 'destructive',
+          description: error.message,
+        });
+      },
+    });
+  };
+
+  return (
+    <Sheet open onOpenChange={handleClose}>
+      <Sheet.View
+        className="p-0"
+        onEscapeKeyDown={(e) => {
+          e.preventDefault();
+        }}
+      >
+        <PropertyForm
+          onSubmit={onSubmit}
+          loading={loading}
+          defaultValues={{
+            icon: '123',
+            name: '',
+            type: type || '',
+            groupId: groupId || '',
+            isSearchable: false,
+            isVisible: true,
+            isVisibleToCreate: false,
+            isRequired: false,
+            isVisibleInCard: false,
+            description: '',
+            code: '',
+            options: [],
+          }}
+          onCancel={handleClose}
+          contentType={type || ''}
+        />
+      </Sheet.View>
+    </Sheet>
+  );
+};

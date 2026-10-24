@@ -1,0 +1,37 @@
+import { Document } from 'mongoose';
+import { ITransaction } from './transactions';
+
+export interface IInvoice {
+  invoiceNumber: string;
+  amount: number;
+  currency: string;
+  phone: string;
+  email: string;
+  description?: string;
+  status: string;
+  customerType: string;
+  customerId: string;
+  contentType: string;
+  contentTypeId: string;
+  createdAt: Date;
+  resolvedAt?: Date;
+  scannedAt?: Date;
+  ticketCodes?: { code: string; scannedAt?: Date | null }[];
+  qrEmailSentAt?: Date;
+  redirectUri?: string;
+  paymentIds: string[];
+  callback?: string;
+  warningText?: string;
+  data?: any;
+  transactions?: ITransaction[];
+}
+export interface IInvoiceDocument extends IInvoice, Document {
+  _id: string;
+}
+
+export interface IInvoiceEditInput {
+  description?: string;
+  amount?: number;
+  currency?: string;
+  status?: string;
+}

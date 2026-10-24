@@ -1,0 +1,19 @@
+import { gql } from '~/gql';
+
+export const UPDATE_TRIAGE_MUTATION = gql(`
+  mutation operationUpdateTriage($_id: String!, $input: ITriageUpdateInput!) {
+    operationUpdateTriage(_id: $_id, input: $input) {
+      _id
+      name
+      description
+      teamId
+      createdBy
+      number
+      createdAt
+      updatedAt
+      priority
+      customerId
+      companyId
+    }
+  }
+`);

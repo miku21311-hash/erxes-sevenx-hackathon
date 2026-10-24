@@ -1,0 +1,136 @@
+import {
+  IconAlignLeft,
+  IconCalendarPlus,
+  IconHash,
+  IconQrcode,
+} from '@tabler/icons-react';
+import { ColumnDef } from '@tanstack/table-core';
+import {
+  Badge,
+  RecordTable,
+  RecordTableInlineCell,
+  RelativeDateDisplay,
+} from 'erxes-ui';
+import {
+  InvoiceAmountCell,
+  InvoiceDescriptionCell,
+  InvoiceStatusCell,
+} from '~/modules/payment/components/InvoiceInlineCells';
+import { InvoiceMoreColumnCell } from '~/modules/payment/components/InvoiceMoreColumn';
+import { IInvoice } from '~/modules/payment/types/Payment';
+
+export const invoicesColumns = (
+  t: (key: string) => string,
+): ColumnDef<IInvoice>[] => [
+  {
+    id: 'more',
+    cell: ({ cell }) => <InvoiceMoreColumnCell invoice={cell.row.original} />,
+    size: 33,
+  },
+  {
+    id: 'invoiceNumber',
+    accessorKey: 'invoiceNumber',
+    header: () => (
+      <RecordTable.InlineHead
+        label={t('invoice-number')}
+        icon={IconAlignLeft}
+      />
+    ),
+    cell: ({ cell }) => {
+      return (
+        <RecordTableInlineCell>
+          <Badge>{cell.getValue() as string}</Badge>
+        </RecordTableInlineCell>
+      );
+    },
+    size: 250,
+  },
+  {
+    id: 'description',
+    accessorKey: 'description',
+    header: () => (
+      <RecordTable.InlineHead label={t('description')} icon={IconHash} />
+    ),
+    cell: ({ cell }) => <InvoiceDescriptionCell invoice={cell.row.original} />,
+    size: 350,
+  },
+  {
+    id: 'amount',
+    accessorKey: 'amount',
+    header: () => (
+      <RecordTable.InlineHead label={t('amount')} icon={IconHash} />
+    ),
+    cell: ({ cell }) => <InvoiceAmountCell invoice={cell.row.original} />,
+  },
+  {
+    id: 'currency',
+    accessorKey: 'currency',
+    header: () => (
+      <RecordTable.InlineHead label={t('currency')} icon={IconHash} />
+    ),
+    cell: ({ cell }) => {
+      return (
+        <RecordTableInlineCell>
+          {cell.getValue() as string}
+        </RecordTableInlineCell>
+      );
+    },
+  },
+  {
+    id: 'status',
+    accessorKey: 'status',
+    header: () => (
+      <RecordTable.InlineHead label={t('status')} icon={IconHash} />
+    ),
+    cell: ({ cell }) => <InvoiceStatusCell invoice={cell.row.original} />,
+  },
+  {
+    id: 'scannedAt',
+    accessorKey: 'scannedAt',
+    header: () => (
+      <RecordTable.InlineHead label={t('scanned')} icon={IconQrcode} />
+    ),
+    cell: ({ row }) => {
+      const { scannedAt, ticketCount = 1 } = row.original as IInvoice;
+      const scannedCount = Math.max(
+        (row.original as IInvoice).scannedCount || 0,
+        scannedAt ? 1 : 0,
+      );
+
+      if (scannedCount === 0) {
+        return (
+          <RecordTableInlineCell>
+            <Badge variant="secondary">{t('not-scanned')}</Badge>
+          </RecordTableInlineCell>
+        );
+      }
+
+      return (
+        <RecordTableInlineCell>
+          <Badge variant={scannedCount >= ticketCount ? 'success' : 'warning'}>
+            {scannedCount} / {ticketCount}
+          </Badge>
+        </RecordTableInlineCell>
+      );
+    },
+  },
+  {
+    id: 'createdAt',
+    accessorKey: 'createdAt',
+    header: () => (
+      <RecordTable.InlineHead
+        label={t('date-created')}
+        icon={IconCalendarPlus}
+      />
+    ),
+    cell: ({ cell }) => {
+      return (
+        <RelativeDateDisplay value={cell.getValue() as string} asChild>
+          <RecordTableInlineCell>
+            <RelativeDateDisplay.Value value={cell.getValue() as string} />
+          </RecordTableInlineCell>
+        </RelativeDateDisplay>
+      );
+    },
+  },
+];

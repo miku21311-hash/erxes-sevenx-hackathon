@@ -1,0 +1,181 @@
+import { initTRPC } from '@trpc/server';
+import { INotificationDocument } from 'erxes-api-shared/core-modules';
+import { getEnv, graphqlPubsub, USER_ROLES } from 'erxes-api-shared/utils';
+import * as admin from 'firebase-admin';
+import { z } from 'zod';
+import { CoreTRPCContext } from '~/init-trpc';
+import { PRIORITY_ORDER } from '~/modules/notifications/constants';
+import { getConfig } from '@/organization/settings/utils/configs';
+import { initFirebase } from '~/modules/notifications/utils';
+import { sendEmail } from '~/utils/email';
+
+const t = initTRPC.context<CoreTRPCContext>().create();
+
+let firebaseCredentials = '';
+
+export const notificationTrpcRouter = t.router({
+  notifications: t.router({
+    create: t.procedure.input(z.any()).mutation(async ({ ctx, input }) => {
+      const { userIds = [], data } = input;
+      const { models, subdomain } = ctx;
+
+      const { kind, allowMultiple, contentType, contentTypeId, priority } =
+        data || {};
+
+      for (const userId of userIds) {
+        let notification: INotificationDocument | null = null;
+
+        const notificationDoc = {
+          ...data,
+          userId,
+          isRead: false,
+          priorityLevel: PRIORITY_ORDER[priority || 'medium'],
+          expiresAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000), // 30 days
+        };
+
+        if (kind === 'user' && !allowMultiple) {
+          // Reuse only active unread notifications; preserve archived and read history.
+          notification = await models.Notifications.findOneAndUpdate(
+            {
+              contentTypeId,
+              contentType,
+              userId,
+              isRead: false,
+              isArchived: { $ne: true },
+            }, // lookup key
+            notificationDoc, // new values
+            { new: true, upsert: true }, // update if exists, insert if not
+          );
+        }
+
+        if (!notification) {
+          // Create new notification
+          notification = await models.Notifications.create(notificationDoc);
+        }
+
+        if (notification) {
+          // Publish the notification event
+          graphqlPubsub.publish(`notificationInserted:${subdomain}:${userId}`, {
+            notificationInserted: { ...notification.toObject() },
+          });
+        }
+      }
+
+      return models.Notifications.find({ userId: { $in: userIds } }).lean();
+    }),
+
+    sendEmail: t.procedure.input(z.any()).mutation(async ({ ctx, input }) => {
+      const { subdomain, models } = ctx;
+
+      const DOMAIN = getEnv({ name: 'DOMAIN', subdomain });
+
+      // for unsubscribe url
+      const modifier = async (data: any, email: string) => {
+        const user = await models.Users.findOne({ email }).lean();
+
+        if (!user) {
+          return;
+        }
+
+        data.uid = user._id;
+
+        const userNotification = await models.Notifications.findOne({
+          userId: user._id,
+        }).lean();
+
+        if (userNotification && data.notification) {
+          data.notification.link = `${DOMAIN}/my-inbox/${userNotification._id}`;
+        }
+      };
+
+      await sendEmail(subdomain, { ...input, modifier }, models);
+    }),
+
+    settings: t.procedure.input(z.any()).query(async ({ ctx, input }) => {
+      const { models } = ctx;
+      const { userIds } = input;
+
+      return models.NotificationSettings.find({ userId: { $in: userIds } });
+    }),
+    sendMobileNotification: t.procedure
+      .input(z.any())
+      .mutation(async ({ ctx, input }) => {
+        const { models } = ctx;
+        const { receivers, deviceTokens, title, body, data } = input;
+
+        const credentials = await getConfig(
+          'GOOGLE_APPLICATION_CREDENTIALS_JSON',
+          '',
+          models,
+        );
+
+        // a key saved from settings replaces the running apps without a restart
+        if (admin.apps.length && credentials !== firebaseCredentials) {
+          await Promise.all(admin.apps.map((app) => app?.delete()));
+        }
+
+        if (!admin.apps.length) {
+          await initFirebase(models, credentials);
+          firebaseCredentials = credentials;
+        }
+
+        const additionalConfigs = await models.Configs.findOne({
+          code: 'GOOGLE_APP_ADDITIONAL_CREDS_JSON',
+        });
+
+        if (admin.apps.length === 1 && additionalConfigs) {
+          for (const [index, item] of (
+            additionalConfigs?.value || []
+          ).entries()) {
+            await initFirebase(models, item, `app${index + 1}`);
+          }
+        }
+
+        const tokens: string[] = [];
+
+        if (receivers?.length) {
+          const xs = await models.Users.find({
+            _id: { $in: receivers },
+            role: { $ne: USER_ROLES.SYSTEM },
+          }).distinct('deviceTokens');
+
+          for (const x of xs) {
+            if (x) tokens.push(x);
+          }
+        }
+
+        if (deviceTokens?.length) {
+          tokens.push(...deviceTokens);
+        }
+
+        if (tokens.length > 0) {
+          for (const app of admin.apps) {
+            if (app) {
+              const transporter = app.messaging();
+
+              for (const token of tokens) {
+                await transporter
+                  .send({
+                    token,
+                    notification: { title, body },
+                    data: data || {},
+                  })
+                  .catch(async (e: Error) => {
+                    console.error(
+                      `Error occurred during firebase send: ${e.message}`,
+                    );
+
+                    if (!e.message.includes('SenderId mismatch')) {
+                      await models.Users.updateOne(
+                        { deviceTokens: token },
+                        { $pull: { deviceTokens: token } },
+                      );
+                    }
+                  });
+              }
+            }
+          }
+        }
+      }),
+  }),
+});

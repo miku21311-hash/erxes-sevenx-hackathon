@@ -1,0 +1,94 @@
+import { usePipelineConfigForm } from '@/pipelines/components/configs/hooks/usePipelineConfigForm';
+import { TPipelineConfig } from '@/pipelines/types';
+import { Button, Form, Sheet, Spinner, toast, useQueryState } from 'erxes-ui';
+import { SubmitHandler } from 'react-hook-form';
+import { useSaveTicketsConfig } from '../hooks/useSaveTicketsConfig';
+import { useCallback } from 'react';
+import { ConfigsForm } from './ConfigsForm';
+import { useGetTicketConfigDetail } from '../hooks/useGetTicketConfigDetail';
+import { useTranslation } from 'react-i18next';
+
+export const ConfigDetails = () => {
+  const { t } = useTranslation('frontline', { keyPrefix: 'modules.pipelines' });
+  const [configId, setConfigId] = useQueryState<string>('configId');
+  const { ticketConfigDetail } = useGetTicketConfigDetail({
+    variables: configId ? { id: configId } : undefined,
+    skip: !configId,
+  });
+  const { saveTicketsConfig, loading } = useSaveTicketsConfig();
+  const { methods } = usePipelineConfigForm();
+
+  const { handleSubmit, reset } = methods;
+
+  const handleClose = useCallback(() => {
+    reset();
+    setConfigId(null);
+  }, [reset, setConfigId]);
+
+  const onSubmit: SubmitHandler<TPipelineConfig> = useCallback(
+    (data) => {
+      saveTicketsConfig({
+        variables: {
+          input: data,
+        },
+        onCompleted: () => {
+          toast({
+            title: t('success', 'Success!'),
+            description: t(
+              'tickets-config-saved-successfully',
+              'Tickets config saved successfully',
+            ),
+            variant: 'success',
+          });
+          handleClose();
+        },
+        onError: (error) => {
+          toast({
+            title: t('error', 'Error'),
+            description: error.message,
+            variant: 'destructive',
+          });
+        },
+      });
+    },
+    [saveTicketsConfig, handleClose, t],
+  );
+
+  return (
+    <Sheet
+      open={!!configId}
+      onOpenChange={(open) => {
+        if (!open) {
+          handleClose();
+        }
+      }}
+    >
+      <Sheet.View className="p-0 min-w-xl">
+        <Form {...methods}>
+          <form
+            onSubmit={handleSubmit(onSubmit)}
+            className="flex flex-col gap-0 size-full box-border overflow-hidden"
+          >
+            <Sheet.Header>
+              <Sheet.Title>
+                {t('messenger-configuration', 'Messenger Configuration')}
+              </Sheet.Title>
+              <Sheet.Close />
+            </Sheet.Header>
+            <Sheet.Content className="flex-1 size-full flex flex-col px-5 py-4 space-y-4 overflow-y-auto hide-scroll styled-scroll">
+              <ConfigsForm form={methods} defaultValues={ticketConfigDetail} />
+            </Sheet.Content>
+            <Sheet.Footer className="shrink-0">
+              <Button variant="ghost" onClick={handleClose}>
+                {t('cancel', 'Cancel')}
+              </Button>
+              <Button type="submit" disabled={loading}>
+                {loading ? <Spinner /> : t('save', 'Save')}
+              </Button>
+            </Sheet.Footer>
+          </form>
+        </Form>
+      </Sheet.View>
+    </Sheet>
+  );
+};

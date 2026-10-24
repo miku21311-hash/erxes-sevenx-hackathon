@@ -1,0 +1,229 @@
+import type {
+  ApolloQueryResult,
+  OperationVariables,
+  QueryOptions,
+} from '@apollo/client';
+
+export type TSearchPayload = Readonly<Record<string, unknown>>;
+
+export type TSearchResultItem = {
+  id: string;
+  title: string;
+  description?: string;
+  createdAt?: string;
+  path: string;
+  matchFields?: Array<{
+    label: string;
+    labelKey?: string;
+    labelNamespace?: string;
+    value: string;
+  }>;
+};
+
+export type TSearchPageInfo = {
+  hasNextPage: boolean;
+  endCursor: string | null;
+};
+
+export type TSearchSelection = {
+  /** Globally unique alias. MUST start with `gs_<pluginName>_`. */
+  alias: string;
+  /** Root Query field, e.g. `customers`. Used for quarantine + diagnostics. */
+  field: string;
+  /** Arg body without parens, e.g. `searchValue: $searchValue, limit: $limit`. */
+  args?: string;
+  /** Selection set incl. braces. Omit for scalar fields like `productsTotalCount`. */
+  body?: string;
+  /** When true, an error on this alias does not fail the whole group. */
+  optional?: boolean;
+};
+
+export type TSearchGroupResult = {
+  items: TSearchResultItem[];
+  totalCount: number;
+  countMode: 'exact' | 'approximate';
+  pageInfo: TSearchPageInfo;
+};
+
+export type TSearchProviderDefinition<TNode> = {
+  /** Repo-unique, kebab-case, e.g. `sales-deals`. */
+  key: string;
+  /** English source of truth. */
+  label: string;
+  labelKey?: string;
+  labelNamespace?: string;
+  icon?: React.ElementType;
+  order?: number;
+  selections: TSearchSelection[];
+  select: (payload: TSearchPayload) => {
+    nodes: TNode[];
+    totalCount?: number;
+    pageInfo: TSearchPageInfo;
+  };
+  toItem: (node: TNode) => TSearchResultItem | null;
+};
+
+export type ISearchProvider = {
+  key: string;
+  label: string;
+  labelKey?: string;
+  labelNamespace?: string;
+  icon?: React.ElementType;
+  order?: number;
+  selections: TSearchSelection[];
+  resolve: (payload: TSearchPayload, limit: number) => TSearchGroupResult;
+};
+
+export type TPropertyInputMeta = Record<string, unknown>;
+
+export type TActivityRowProps = {
+  activity: {
+    _id: string;
+    activityType: string;
+    sourcePlugin?: string;
+    createdAt: string | Date;
+    metadata?: Record<string, any>;
+    [key: string]: any;
+  };
+};
+
+export type TProductRemainderProduct = {
+  _id: string;
+  code: string;
+  remainder?: TProductRemainderValue | null;
+};
+
+export type TProductRemainderValue = {
+  remainder?: number;
+  remainders?: unknown[];
+};
+
+export type TProductRemainderPatch = {
+  _id: string;
+  remainder: TProductRemainderValue;
+};
+
+export type TProductRemainderQuery = <
+  TData,
+  TVariables extends OperationVariables = OperationVariables,
+>(
+  options: QueryOptions<TVariables, TData>,
+) => Promise<ApolloQueryResult<TData>>;
+
+export type TProductRemainderProvider = (params: {
+  products: TProductRemainderProduct[];
+  pipelineId?: string;
+  query: TProductRemainderQuery;
+}) => Promise<TProductRemainderPatch[]>;
+
+export type TPropertyInputProps = {
+  value: string;
+  onValueChange: (value: string) => void;
+  meta?: TPropertyInputMeta;
+  onMetaChange: (meta: TPropertyInputMeta) => void;
+  disabled?: boolean;
+};
+
+export type IUIConfig = {
+  name: string;
+  path: string;
+  icon?: React.ElementType;
+  i18n?: boolean;
+  i18nNamespace?: string;
+  hasFloatingWidget?: boolean;
+  /**
+   * erxes platform versions this plugin is built for, as a semver range
+   * (e.g. `'~3.2'`, `'>=3.2.25 <3.4'`). Core warns — and still loads the
+   * plugin — when the running platform is outside the range.
+   */
+  platform?: string;
+  navigationGroup?: {
+    name: string;
+    defaultPath?: string;
+    icon: React.ElementType;
+    /**
+     * @deprecated Ignored by core-ui since 3.2.25: a plugin draws its own
+     * sidebar by wrapping its routed entry in `AppLayout`. Kept so existing
+     * configs still type-check; it will be removed in a later minor release.
+     */
+    content?: () => React.ReactNode;
+    /**
+     * @deprecated Ignored by core-ui since 3.2.25; see `content`.
+     */
+    subGroup?: () => React.ReactNode;
+  };
+
+  widgets?: {
+    relationWidgets?: {
+      name: string;
+      icon?: React.ElementType;
+      label?: string;
+      // Host record types the widget shows on, e.g. `core:customer`;
+      // every host when omitted.
+      contentTypes?: string[];
+    }[];
+    // Sections a plugin adds to another plugin's settings page, e.g. what a
+    // POS or a pipeline sends to loyalty.
+    relationSettingsWidgets?: {
+      name: string;
+      icon?: React.ElementType;
+      label?: string;
+    }[];
+    // Fields a plugin offers for picking its own records inside another
+    // plugin's form, with whatever creating one there takes.
+    recordPickerWidgets?: {
+      name: string;
+      contentType: string;
+    }[];
+    // Record types the plugin draws in the app's side panel (its
+    // `./recordPanel` remote, given `IRecordPanelProps`), e.g.
+    // `operation:task`; core keeps the panel's relations and activity.
+    recordPanels?: {
+      contentType: string;
+      // `false` when the type has no custom properties: no Properties tab.
+      properties?: boolean;
+    }[];
+    // Sections a plugin adds to a customer's or company's overview (its
+    // `./contactWidget` remote, given ui-modules' `IContactWidgetProps`):
+    // one per module, e.g. `tasks`, listing that contact's records.
+    contactWidgets?: {
+      name: string;
+      label?: string;
+      icon?: React.ElementType;
+    }[];
+    customerDetailWidgets?: {
+      name: string;
+    }[];
+    formWidgets?: {
+      name: string;
+      contentType: string;
+      icon?: React.ElementType;
+    }[];
+    propertyInputs?: Record<string, React.ComponentType<TPropertyInputProps>>;
+    activityRows?: Record<string, React.ComponentType<TActivityRowProps>>;
+    productRemainderProviders?: TProductRemainderProvider[];
+  };
+  modules?: {
+    name: string;
+    icon?: React.ElementType;
+    path: string;
+    hasAutomation?: boolean;
+    hasRelationWidget?: boolean;
+    hasFloatingWidget?: boolean;
+    hasSegmentConfigWidget?: boolean;
+  }[];
+  searchProviders?: ISearchProvider[];
+};
+
+export type ICoreModule = {
+  name: string;
+  icon?: React.ElementType;
+  path: string;
+  hasSettings?: boolean;
+  settingsOnly?: boolean;
+  submenus?: {
+    name: string;
+    path: string;
+    icon?: React.ElementType;
+  }[];
+};
